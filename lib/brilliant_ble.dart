@@ -16,11 +16,11 @@ class BrilliantBle {
 
   late BluetoothCharacteristic? _replRxCharacteristic;
   late BluetoothCharacteristic? _replTxCharacteristic;
-  late BluetoothCharacteristic? _frameRxCharacteristic;
+  // late BluetoothCharacteristic? _frameRxCharacteristic;
   late BluetoothCharacteristic? _frameTxCharacteristic;
   late int _mtu = 100;
   late Function _responseCallback;
-  late Completer<String?> _completer; 
+  late Completer<String?> _completer;
   // late BluetoothCharacteristic _monocleRawDataRxCharacteristic;
   // late BluetoothCharacteristic _monocleRawDataTxCharacteristic;
   Function? onData;
@@ -95,8 +95,8 @@ class BrilliantBle {
         await _device!.connectionState.first ==
             BluetoothConnectionState.connected) {
       var bits = data.codeUnits;
-       _completer = Completer();
-    // send in chunks of _mtu - 3  bytes
+      _completer = Completer();
+      // send in chunks of _mtu - 3  bytes
       for (var i = 0; i < bits.length; i += _mtu - 3) {
         var end = i + _mtu - 3;
         if (end > bits.length) {
@@ -106,21 +106,22 @@ class BrilliantBle {
       }
     }
     _responseCallback = (data) {
-      _completer.complete(data);
+      if (!_completer.isCompleted) {
+        _completer.complete(data);
+      }
     };
     Timer(const Duration(seconds: 5), () {
       if (!_completer.isCompleted) _completer.complete(null);
     });
-    return wait?_completer.future:null;
+    return wait ? _completer.future : null;
   }
-  Future<void> _sendDataChunk(List<int> bits ) async {
 
-      if (_frameRxCharacteristic != null) {
-        await _frameRxCharacteristic!.write(bits);
-      } else if (_replRxCharacteristic != null) {
-        await _replRxCharacteristic!.write(bits);
-      }
+  Future<void> _sendDataChunk(List<int> bits) async {
+    if (_replRxCharacteristic != null) {
+      await _replRxCharacteristic!.write(bits);
+    }
   }
+
   Future<void> uploadFile(String path, String data) async {
     if (_device != null &&
         await _device!.connectionState.first ==
@@ -129,33 +130,33 @@ class BrilliantBle {
         // TODO implement file upload for monocle
       }
       if (device!.advName.toLowerCase().contains("frame")) {
-         
-            // if drectory remove trailing / and create directory
-            if (path.contains("/")){
-              var dirpath = path.substring(0,path.lastIndexOf("/"));
-            var dirMakeCmd = "a=frame.file.mkdir('$dirpath');print(a);";
-              await sendData(dirMakeCmd);
-            }
-            if (data.isEmpty){
-              await sendData("f = frame.file.open('$path', 'w');f:write('');print(f:close());");
-            }else{
-              // create file and write data in mtu chunks
-              await sendData("f = frame.file.open('$path', 'w');print(f);");
-              var chunkSize = _mtu-40;
-              for (var i = 0; i < data.length; i += chunkSize) {
-                var chunk = data.substring(i, i + chunkSize);
-                await sendData("f:write([[$chunk]]);");
-              }
-              await sendData("print(f:close());");
-            }
+        // if drectory remove trailing / and create directory
+        if (path.contains("/")) {
+          var dirpath = path.substring(0, path.lastIndexOf("/"));
+          var dirMakeCmd = "a=frame.file.mkdir('$dirpath');print(a);";
+          await sendData(dirMakeCmd);
+        }
+        if (data.isEmpty) {
+          await sendData(
+              "f = frame.file.open('$path', 'w');f:write('');print(f:close());");
+        } else {
+          // create file and write data in mtu chunks
+          await sendData("f = frame.file.open('$path', 'w');print(f);");
+          var chunkSize = _mtu - 40;
+          for (var i = 0; i < data.length; i += chunkSize) {
+            var chunk = data.substring(i, i + chunkSize);
+            await sendData("f:write([[$chunk]]);");
+          }
+          await sendData("print(f:close());");
+        }
       }
     }
   }
+
   Future<List<String>> listFiles(String path) async {
     if (_device != null &&
         await _device!.connectionState.first ==
             BluetoothConnectionState.connected) {
-
       if (device!.advName.toLowerCase().contains("monocle")) {
         // TODO implement file upload for monocle
       }
@@ -166,6 +167,7 @@ class BrilliantBle {
     }
     return [];
   }
+
   Future<void> discoverServices(BluetoothDevice device) async {
     List<BluetoothService> services = await device.discoverServices();
     for (var service in services) {
@@ -177,11 +179,10 @@ class BrilliantBle {
           if (characteristic.uuid == UUID.monocleReplTxCharacteristicUUID) {
             _replTxCharacteristic = characteristic;
             final subscription = characteristic.onValueReceived.listen((value) {
-                _responseCallback(String.fromCharCodes(value));
+              _responseCallback(String.fromCharCodes(value));
               if (onData != null) {
                 onData!(value);
               }
-              
             });
             device.cancelWhenDisconnected(subscription);
             _replTxCharacteristic!.setNotifyValue(true);
@@ -206,7 +207,7 @@ class BrilliantBle {
           if (characteristic.uuid == UUID.frameTxCharacteristicUUID) {
             _frameTxCharacteristic = characteristic;
             final subscription = characteristic.onValueReceived.listen((value) {
-                _responseCallback(String.fromCharCodes(value));
+              _responseCallback(String.fromCharCodes(value));
               if (onData != null) {
                 onData!(value);
               }
@@ -215,7 +216,7 @@ class BrilliantBle {
             _frameTxCharacteristic!.setNotifyValue(true);
           }
           if (characteristic.uuid == UUID.frameRxCharacteristicUUID) {
-            _frameRxCharacteristic = characteristic;
+            // _frameRxCharacteristic = characteristic;
           }
         }
       }
@@ -228,7 +229,8 @@ class BrilliantBle {
     if (device == null) {
       return null;
     }
-    var subscription = device.connectionState.listen((BluetoothConnectionState state) async {
+    var subscription =
+        device.connectionState.listen((BluetoothConnectionState state) async {
       if (state == BluetoothConnectionState.disconnected) {
         if (onDisconnected != null) {
           onDisconnected!();
@@ -246,7 +248,7 @@ class BrilliantBle {
         }
       }
     });
-    
+
     device.cancelWhenDisconnected(subscription, delayed: true, next: true);
     await device.connect();
     return device;
